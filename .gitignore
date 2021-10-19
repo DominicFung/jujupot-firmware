@@ -6,3 +6,6 @@
 .vscode/ipch
 
 certs/
+tmp/
+
+secret_*.h

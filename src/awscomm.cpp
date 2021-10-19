@@ -2,15 +2,11 @@
 #include <string>
 
 #include <AWS_IOT.h>
-#include "awsutil.h"
+#include "awscomm.h"
+
+#include "secret_aws.h"
 
 AWS_IOT aws;
-
-char HOST_ADDRESS[]="a3hpt57dwwxw4i-ats.iot.ca-central-1.amazonaws.com"; // AWS host address
-char CLIENT_ID[]= "basicPubSub";            //test001
-char TOPIC_NAME[]= "sdk/test/Python";       // topic_1
-
-char deviceId[]="test001";
 
 // AWS IoT core shadow topics
 // char aws_topic_prefix[]="$aws/things/";
@@ -36,7 +32,7 @@ std::string aws_topic_update_rejected = aws_topic_prefix + "/shadow/delete/rejec
  *    - 5: update shadow reject
  */
 int msgReceived=0, msgCount=0;
-char rcvdPayload[512];
+char rcvdPayload[1024];
 
 void cbhandler(char *topicName, int payloadLen, char *payLoad)
 {
@@ -68,20 +64,20 @@ void aws_connect()
 
       char all_success='y';
 
-      if(0==aws.subscribe(TOPIC_NAME, cbhandler)) {
-          Serial.print("Subscribe Successfull to");
-          Serial.println(TOPIC_NAME);
-      } else {
-          Serial.print(" --- FAILED to subscribe: ");
-          Serial.print(TOPIC_NAME);
-          Serial.println(" --- ");
-          all_success='n';
-      }
+      // if(0==aws.subscribe(TOPIC_NAME, cbhandler)) {
+      //     Serial.print("Subscribe Successfull to ");
+      //     Serial.println(TOPIC_NAME);
+      // } else {
+      //     Serial.print(" --- FAILED to subscribe: ");
+      //     Serial.print(TOPIC_NAME);
+      //     Serial.println(" --- ");
+      //     all_success='n';
+      // }
 
       char get_topic_accept[aws_topic_get_accepted.length()+1];
       strcpy(get_topic_accept, aws_topic_get_accepted.c_str());
       if (0==aws.subscribe(get_topic_accept, cbhandler)) {
-          Serial.print("Subscribe Successfull to");
+          Serial.print("Subscribe Successfull to ");
           Serial.println(get_topic_accept);
       } else {
           Serial.print(" --- FAILED to subscribe: ");
@@ -93,7 +89,7 @@ void aws_connect()
       char get_topic_reject[aws_topic_get_rejected.length()+1];
       strcpy(get_topic_reject, aws_topic_get_rejected.c_str());
       if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to");
+          Serial.print("Subscribe Successfull to ");
           Serial.println(get_topic_reject);
       } else {
           Serial.print(" --- FAILED to subscribe: ");
@@ -105,7 +101,7 @@ void aws_connect()
       char update_topic_accept[aws_topic_update_accepted.length()+1];
       strcpy(update_topic_accept, aws_topic_update_accepted.c_str());
       if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to");
+          Serial.print("Subscribe Successfull to ");
           Serial.println(update_topic_accept);
       } else {
           Serial.print(" --- FAILED to subscribe: ");
@@ -117,7 +113,7 @@ void aws_connect()
       char update_topic_reject[aws_topic_update_rejected.length()+1];
       strcpy(update_topic_reject, aws_topic_update_rejected.c_str());
       if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to");
+          Serial.print("Subscribe Successfull to ");
           Serial.println(update_topic_reject);
       } else {
           Serial.print(" --- FAILED to subscribe: ");
@@ -154,10 +150,13 @@ void aws_send(const std::string& s) {
   Serial.println(msgCount);
   msgCount++;
 
+  // old: aws.publish(TOPIC_NAME, payload) == 0
+  char topic[aws_topic_update.length()+1];
+  strcpy(topic, aws_topic_update.c_str());
 
-  if(aws.publish(TOPIC_NAME, payload) == 0)
+  if(aws.publish(topic, payload) == 0)
   {        
-      Serial.print("Publish Message:");
+      Serial.print("Publish Message: ");
       Serial.println(payload);
       msgCount++;
   }
@@ -167,7 +166,7 @@ void aws_send(const std::string& s) {
   }
 }
 
-std::string * aws_get_shadow() {
+std::string aws_get_shadow() {
   char topic[aws_topic_get.length()+1];
   strcpy(topic, aws_topic_get.c_str());
 

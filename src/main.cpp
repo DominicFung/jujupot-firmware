@@ -5,80 +5,95 @@
 #include <AWS_IOT.h>
 #include <WiFi.h>
 
-#include "awsutil.h"
+#include <driver/rtc_io.h>
+#include "BluetoothSerial.h"
 
-/**
- * PLEASE NOTE:
- *  - 15 = p15
- *  - 12 = p32
- *  - 25 = p27
- *  - 26 = p26 
- *  - 27 = p25
- */
+#include "awscomm.h"
+#include "potshadow.h"
+#include "wifiutil.h"
+#include "potutil.h"
 
 #define onboard 2    // ESP32 LED pin
-#define soilpin 15   // Capacitive Soil  Moisture Sensor v1.2
+char bluetoothPrefix[] = "JuJuPot-";
 
-#define nldrpin 12  // North LDR 
-#define eldrpin 25  // East LDR
-#define sldrpin 26  // South LDR
-#define wldrpin 27  // West LDR
-
-#define temppin 13  // LM35 Temp sensor
-
-int status = WL_IDLE_STATUS;
-
-char WIFI_SSID[]="WF5B";                // your Wifi SSID
-char WIFI_PASSWORD[]="908EE03518";      // Wifi Password
+char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
+char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
+char potType[] = "small-planter-v1";
+char color[] = "blue-white-v1";
+char plant[] = "sedum-morganianum_costco_pid";
+int fwVersion = 1;
 
 const int num_reads = 10;
-
-// Moisture Sensor
-const int airvalue = 4095;
-const int watervalue = 2023;
-int soilmoisturevalue=0;
-
-// Light Level
-const int lightinit = 100;
-int lightvalue=0;
-
-
 int tick=0;
 
-void connect_wifi_aws(const int &smv) {
-  digitalWrite(onboard, HIGH);
-  while (status != WL_CONNECTED)
-  {
-      Serial.print("Attempting to connect to SSID: ");
-      Serial.println(WIFI_SSID);
-      // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-      status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
 
-      // wait 5 seconds for connection:
-      delay(5000);
+BluetoothSerial SerialBT;
+
+void flash_led() {
+  digitalWrite(onboard, LOW);
+  delay(1000);
+  digitalWrite(onboard, HIGH);
+  delay(1000);
+  digitalWrite(onboard, LOW);
+}
+
+esp_sleep_wakeup_cause_t print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
   }
 
-  Serial.println("Connected to wifi");
+  return wakeup_reason;
+}
+
+void step_1_read_shadow() {
+  digitalWrite(onboard, HIGH);
+  connect_wifi();
   aws_connect();
   delay(2000);
 
-  //send data
-  StaticJsonDocument<200> doc;
-  doc["unixtime"] = 1632682156;
-  doc["deviceid"] = "test001";
+  std::string old_shadow = aws_get_shadow();
+  char json[old_shadow.length()+1];
+  strcpy(json, old_shadow.c_str());
+  load_shadow(json);
 
-  JsonObject soilmoisture = doc.createNestedObject("soilmoisture");
-  soilmoisture["watervalue"] = watervalue;
-  soilmoisture["airvalue"] = airvalue;
-  soilmoisture["value"] = smv;
+  disconnect_wifi();
 
-  std::string output;
-  serializeJson(doc, output);
+  digitalWrite(onboard, LOW);
+  delay(1000);
+}
 
-  Serial.print("doc: ");
-  Serial.println(output.c_str());
+void step_2_sensor_input() {
+  init_shadow(productId, fwVersion);
+  add_pot_info(potType, color, plant);
+  add_signoff(verificationId);
 
-  aws_send(output); //"{\"soilmosture\" : { \"min\" : \"\"}"
+  int svalue = check_moisture();
+  add_sensor_value("moisture", airvalue, watervalue, 6, svalue);
+
+  int nlvalue = check_nlight();
+  add_sensor_value("light1", lightvaluehigh, lightvaluelow, 6, nlvalue);
+}
+
+void step_3_write_shadow() {
+  digitalWrite(onboard, HIGH);
+  connect_wifi();
+  aws_connect();
+  delay(2000);
+
+  unsigned long time = get_time();
+  std::string output = get_new_shadow(time);
+  aws_send(output);
   tick=0;
 
   digitalWrite(onboard, LOW);
@@ -86,10 +101,14 @@ void connect_wifi_aws(const int &smv) {
   // wait for aknowledgment
   while (1) {
     digitalWrite(onboard, HIGH);
-    if(msgReceived == 1) {
-      msgReceived = 0;
-      Serial.print("Received Message:");
+    if(msgReceived > 0) {
+      Serial.print("Recieved Message Status: ");
+      Serial.println(msgReceived);
+
+      Serial.print("Received Message: ");
       Serial.println(rcvdPayload);
+
+      msgReceived = 0;
 
       // ESP light sleep
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
@@ -109,82 +128,70 @@ void connect_wifi_aws(const int &smv) {
   }
 }
 
-void disconnect_wifi() {
-  status = WiFi.disconnect();
-  Serial.print("Wifi Status: ");
-  Serial.print(status);
+int bluetooth_loop() {
+  // if (Serial.available()) {
+  //   SerialBT.write(Serial.read());
+  // }
+  if (SerialBT.available()) {
+    Serial.write(SerialBT.read());
+
+    // 1 char at a time!
+  }
+  delay(20);
+
+  return 1;
 }
 
-void check_moisture() {
-  int tick = 0;
-  int MULTI_READ = 6;
-  
-  while (tick < MULTI_READ) {
-    soilmoisturevalue = analogRead(soilpin);
-    Serial.print("Soil Mosture Reading: ");
-    Serial.println(soilmoisturevalue);
-    tick++;
+void run_bluetooth() {
+  int p = strlen(productId);
+  std::string post = std::string(productId).substr(p-5, p-1);
+  std::string bt = bluetoothPrefix + post;
 
-    delay(1000);
+  char btname[bt.length()+1];
+  strcpy(btname, bt.c_str());
+  SerialBT.begin(btname);
+
+  int bt_status = 1;
+  while(bt_status) {
+    bt_status = bluetooth_loop();
   }
-
-  Serial.print("FINAL Soil Mosture Reading: ");
-  Serial.println(soilmoisturevalue);
-}
-
-void check_nlight() {
-  int tick = 0;
-  int MULTI_READ = 6;
-  
-  while (tick < MULTI_READ) {
-    lightvalue = analogRead(nldrpin);
-    Serial.print("North LDR Reading: ");
-    Serial.println(lightvalue);
-    tick++;
-
-    delay(1000);
-  }
-
-  Serial.print("FINAL North LDR Reading: ");
-  Serial.println(lightvalue);
 }
 
 void setup() {
   pinMode(onboard, OUTPUT);
-  //pinMode(nldrpin, INPUT);
-
   Serial.begin(9600);
+  Serial.println("");
   Serial.println("Running Setup ..");
 
-  // aws_connect();
-  // aws_get_shadow();
-  // disconnect_wifi();
+  // IF USER is defined ,, this device is activated and we should update the cloud
+  //step_1_read_shadow();
+  //step_2_sensor_input();
+  //step_3_write_shadow();
 
-  // aws_connect();
-  // aws_get_shadow();
-  // disconnect_wifi();
+  rtc_gpio_pulldown_en((gpio_num_t) GPIO_NUM_34);
+  esp_sleep_enable_ext0_wakeup((gpio_num_t) GPIO_NUM_34, RISING);
 
+  // ESP light sleep
+  // esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  // esp_light_sleep_start();
 }
-
 
 // Forgo loop usage?
 void loop() {
-  //[E][esp32-hal-adc.c:135] __analogRead(): GPIO15: ESP_ERR_TIMEOUT: ADC2 is in use by Wi-Fi.
-  
-  // Read to average out ..
-  if (tick < num_reads) {
-    check_moisture();
-    check_nlight();
+  int GPIO_reason = esp_sleep_get_ext1_wakeup_status();
+  Serial.print("GPIO that triggered the wake up: GPIO ");
+  Serial.println((log(GPIO_reason))/log(2), 0);
 
-    // tick++;
+  esp_sleep_wakeup_cause_t w_reason;
+  w_reason = print_wakeup_reason();
+  
+  if (w_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    Serial.println("ACTIVATE BLUETOOTH");
+
+
   }
 
-  // Finish Read, start send
-  if (tick == num_reads) {
-    // connect_wifi_aws(soilmoisturevalue);
-    // -- END --
-  }
-  
-  Serial.println("loop complete.");
-  delay(1000);
+  flash_led();
+  Serial.println("Going to sleep ...");
+  esp_deep_sleep_start();
 }
