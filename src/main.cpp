@@ -5,16 +5,20 @@
 #include <AWS_IOT.h>
 #include <WiFi.h>
 
+#include <Preferences.h>
 #include <driver/rtc_io.h>
-#include "BluetoothSerial.h"
 
-#include "awscomm.h"
-#include "potshadow.h"
-#include "wifiutil.h"
-#include "potutil.h"
+#include "storage.h"
+
+#include "aws/awscomm.h"
+#include "pot/potshadow.h"
+#include "wifi/wifiutil.h"
+#include "pot/potutil.h"
+#include "ble/bt.h"
 
 #define onboard 2    // ESP32 LED pin
-char bluetoothPrefix[] = "JuJuPot-";
+
+bool _TESTER = true;
 
 char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
 char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
@@ -23,14 +27,17 @@ char color[] = "blue-white-v1";
 char plant[] = "sedum-morganianum_costco_pid";
 int fwVersion = 1;
 
+// char preference_name[] = "juju-app";
+// char wifi_ssid_key[] = "wifi_ssid";
+// char wifi_password[] = "wifi_password";
+
+const char * TEMP_WIFI;
+const char * TEMP_PASS;
+
 const int num_reads = 10;
 int tick=0;
 
-#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
-#endif
-
-BluetoothSerial SerialBT;
+// Preferences preferences;
 
 void flash_led() {
   digitalWrite(onboard, LOW);
@@ -87,7 +94,20 @@ void step_2_sensor_input() {
 
 void step_3_write_shadow() {
   digitalWrite(onboard, HIGH);
-  connect_wifi();
+  if (_TESTER) { connect_wifi(); }
+  else {
+    preferences.begin(preference_name, false);
+    TEMP_WIFI = preferences.getString(wifi_ssid_key, "").c_str();
+    Serial.print("Saved Wifi: ");
+    Serial.print(TEMP_WIFI);
+
+    TEMP_PASS = preferences.getString(wifi_password, "").c_str();
+    Serial.print("Saved Pass: ");
+    Serial.print(TEMP_PASS);
+
+    connect_wifi(TEMP_WIFI, TEMP_PASS);
+  }
+  
   aws_connect();
   delay(2000);
 
@@ -128,40 +148,11 @@ void step_3_write_shadow() {
   }
 }
 
-int bluetooth_loop() {
-  // if (Serial.available()) {
-  //   SerialBT.write(Serial.read());
-  // }
-  if (SerialBT.available()) {
-    Serial.write(SerialBT.read());
-
-    // 1 char at a time!
-  }
-  delay(20);
-
-  return 1;
-}
-
-void run_bluetooth() {
-  int p = strlen(productId);
-  std::string post = std::string(productId).substr(p-5, p-1);
-  std::string bt = bluetoothPrefix + post;
-
-  char btname[bt.length()+1];
-  strcpy(btname, bt.c_str());
-  SerialBT.begin(btname);
-
-  int bt_status = 1;
-  while(bt_status) {
-    bt_status = bluetooth_loop();
-  }
-}
-
 void setup() {
   pinMode(onboard, OUTPUT);
   Serial.begin(9600);
-  Serial.println("");
-  Serial.println("Running Setup ..");
+  Serial.println();
+  Serial.println("Initating preferences");
 
   // IF USER is defined ,, this device is activated and we should update the cloud
   //step_1_read_shadow();
@@ -188,7 +179,7 @@ void loop() {
   if (w_reason == ESP_SLEEP_WAKEUP_EXT0) {
     Serial.println("ACTIVATE BLUETOOTH");
 
-
+    run_bluetooth(productId);
   }
 
   flash_led();

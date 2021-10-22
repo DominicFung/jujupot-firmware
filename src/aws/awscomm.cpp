@@ -64,16 +64,6 @@ void aws_connect()
 
       char all_success='y';
 
-      // if(0==aws.subscribe(TOPIC_NAME, cbhandler)) {
-      //     Serial.print("Subscribe Successfull to ");
-      //     Serial.println(TOPIC_NAME);
-      // } else {
-      //     Serial.print(" --- FAILED to subscribe: ");
-      //     Serial.print(TOPIC_NAME);
-      //     Serial.println(" --- ");
-      //     all_success='n';
-      // }
-
       char get_topic_accept[aws_topic_get_accepted.length()+1];
       strcpy(get_topic_accept, aws_topic_get_accepted.c_str());
       if (0==aws.subscribe(get_topic_accept, cbhandler)) {
@@ -150,7 +140,6 @@ void aws_send(const std::string& s) {
   Serial.println(msgCount);
   msgCount++;
 
-  // old: aws.publish(TOPIC_NAME, payload) == 0
   char topic[aws_topic_update.length()+1];
   strcpy(topic, aws_topic_update.c_str());
 
