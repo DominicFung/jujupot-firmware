@@ -16,7 +16,6 @@ BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-uint32_t value = 0;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
@@ -28,23 +27,21 @@ char preference_name[] = "juju-app";
 char wifi_ssid_key[] = "wifi_ssid";
 char wifi_password[] = "wifi_password";
 
-// extern Preferences preferences;
-// extern char preference_name[];
-// extern char wifi_ssid_key[];
-// extern char wifi_password[];
-
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
+      Serial.println("MyServerCallback: onConnect");
       deviceConnected = true;
     };
 
     void onDisconnect(BLEServer* pServer) {
+      Serial.println("MyServerCallback: onDisconnect");
       deviceConnected = false;
     }
 };
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
+      Serial.println("MyCallbacks onWrite");
       std::string value = pCharacteristic->getValue();
 
       if (value.length() > 0) {
@@ -88,22 +85,30 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 int bluetooth_loop() {
   // notify changed value
     if (deviceConnected) {
-        pCharacteristic->setValue((uint8_t*)&value, 4);
-        pCharacteristic->notify();
-        value++;
-        delay(3); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+      /*  bluetooth stack will go into congestion, if too many packets are sent, 
+           - in 6 hours test i was able to go as low as 3ms - (author)
+           - 100 seems stable. - Dom
+      */
+      delay(100); // 3
     }
+
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
-        Serial.println("start advertising");
+        Serial.println("Start advertising");
         oldDeviceConnected = deviceConnected;
     }
+
     // connecting
     if (deviceConnected && !oldDeviceConnected) {
-        // do stuff here on connecting
-        oldDeviceConnected = deviceConnected;
+      // do stuff here on connecting
+      oldDeviceConnected = deviceConnected;
+
+      pCharacteristic->setValue("Juju-pot connected.");
+      pCharacteristic->notify();
+
+      Serial.println("BLE App sucessfully connected.");
     }
 
     return 1;
@@ -121,7 +126,7 @@ void run_bluetooth(const char productId[37]) {
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  BLECharacteristic *pCharacteristic = pService->createCharacteristic(
+  pCharacteristic = pService->createCharacteristic(
                                      CHARACTERISTIC_UUID,
                                      BLECharacteristic::PROPERTY_READ   |
                                      BLECharacteristic::PROPERTY_WRITE  |
