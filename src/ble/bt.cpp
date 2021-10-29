@@ -7,6 +7,7 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLE2902.h>
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -40,6 +41,12 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 class MyCallbacks: public BLECharacteristicCallbacks {
+    void onRead(BLECharacteristic *pCharacteristic) {
+      Serial.println("MyCallbacks onRead");
+
+      std::string value = pCharacteristic->getValue();
+    }
+
     void onWrite(BLECharacteristic *pCharacteristic) {
       Serial.println("MyCallbacks onWrite");
       std::string value = pCharacteristic->getValue();
@@ -135,10 +142,12 @@ void run_bluetooth(const char productId[37]) {
                                      );
 
   //pCharacteristic->setValue("ESP32 TEST");
-
+  pCharacteristic->addDescriptor(new BLE2902());
+  pCharacteristic->setReadProperty(true);
   pCharacteristic->setCallbacks(new MyCallbacks());
-  pCharacteristic->setValue("Sending love from Juju-pot <3");
+  //pCharacteristic->setValue("Sending love from Juju-pot <3");
 
+  pService->addCharacteristic(pCharacteristic);
   pService->start();
 
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
