@@ -13,6 +13,9 @@
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
 
+//#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  1        /* Time ESP32 will go to sleep (in seconds) */
+
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
@@ -27,7 +30,17 @@ Preferences preferences;
 char preference_name[] = "juju-app";
 char wifi_ssid_key[] = "wifi_ssid";
 char wifi_password[] = "wifi_password";
+char user_id_key[] = "juju_user_id";
 
+const char * temp_ssid;
+const char * temp_pass;
+const char * temp_userid;
+
+// std::string s_wifi = "";
+// std::string s_pass = "";
+
+// We dont really need to know if pServer is connected or not.
+// remove to reduce flash mem size.
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       Serial.println("MyServerCallback: onConnect");
@@ -41,12 +54,6 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 class MyCallbacks: public BLECharacteristicCallbacks {
-    void onRead(BLECharacteristic *pCharacteristic) {
-      Serial.println("MyCallbacks onRead");
-
-      std::string value = pCharacteristic->getValue();
-    }
-
     void onWrite(BLECharacteristic *pCharacteristic) {
       Serial.println("MyCallbacks onWrite");
       std::string value = pCharacteristic->getValue();
@@ -61,19 +68,26 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 
         preferences.begin(preference_name, false);
         if (value.rfind("wifi:: ", 0) == 0) {
-          const char * temp_ssid = value.substr(7).c_str();
+          temp_ssid = value.substr(7).c_str();
           
           Serial.print("Saving WIFI ssid to preference .. ");
           Serial.println(temp_ssid);
 
           preferences.putString(wifi_ssid_key , temp_ssid);
         } else if (value.rfind("pass:: ", 0) == 0) {
-          const char * temp_pass = value.substr(7).c_str();
+          temp_pass = value.substr(7).c_str();
 
           Serial.print("Saving WIFI pass to preference .. ");
           Serial.println(temp_pass);
 
           preferences.putString(wifi_password , temp_pass);
+        } else if (value.rfind("user:: ", 0) == 0){
+          temp_userid = value.substr(7).c_str();
+
+          Serial.print("Saving USER ID to preference .. ");
+          Serial.println(temp_userid);
+
+          preferences.putString(user_id_key, temp_userid);
         } else {
           Serial.print("Could not find preference category (wifi:: || pass::)");
 
@@ -85,6 +99,12 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 
         preferences.end();
         Serial.println("*********");
+
+        if (temp_ssid && temp_pass && temp_userid) {
+          Serial.println("wifi/pass & userid defined. Will now sleep and wake to register device.");
+          esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+          esp_deep_sleep_start();
+        }
       }
     }
 }; 
@@ -150,12 +170,13 @@ void run_bluetooth(const char productId[37]) {
   pService->addCharacteristic(pCharacteristic);
   pService->start();
 
-  BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-  pAdvertising->setMinPreferred(0x12);
-  pAdvertising->start();
+  //BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  //pAdvertising->addServiceUUID(SERVICE_UUID);
+  //pAdvertising->setScanResponse(true);
+  //pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+  //pAdvertising->setMinPreferred(0x12);
+  //pAdvertising->start();
+  pServer->startAdvertising();
   Serial.println("Waiting a client connection to notify...");
 
   int bt_status = 1;

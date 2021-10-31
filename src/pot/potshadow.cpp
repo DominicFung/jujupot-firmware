@@ -15,14 +15,14 @@ void add_signoff(const char verify_id[37]) {
   reported["verification-id"] = verify_id;
 }
 
-void add_pot_info(const char type_id[200], const char color[200], const char plant[200]) {
+void add_pot_info(const char type_id[50], const char color[50], const char plant[50]) {
   JsonObject s = reported.createNestedObject("pot");
   s["type-id"] = type_id;
   s["color"] = color;
   s["plant"] = plant;
 }
 
-void add_sensor_value(const char key[200], const int high, const int low, const int samples, const int value) {
+void add_sensor_value(const char key[50], const int high, const int low, const int samples, const int value) {
   JsonObject s = reported.createNestedObject(key);
   s["config-high"] = high;
   s["config-low"] = low;
