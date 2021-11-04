@@ -20,7 +20,8 @@
 #define SLEEP_HOURS 1
 
 // When set to true, uses WIFI CONFIGURATIONS from secret_wifi.h
-//bool _TESTER = false;
+bool _TESTER = false;
+
 char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
 char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
 char potType[] = "small-planter-v1";
@@ -28,17 +29,16 @@ char color[] = "blue-white-v1";
 char plant[] = "sedum-morganianum_costco_pid";
 int fwVersion = 1;
 
-const char * TEMP_WIFI;
-const char * TEMP_PASS;
 const char * TEMP_USER;
+bool isLoaded = false;
 
 const int num_reads = 10;
 int tick=0;
 
 // Preferences preferences;
-void flash_led() {
+void flash_led(int times) {
   tick = 0;
-  while (tick < 4) {
+  while (tick < times) {
     delay(200);
     digitalWrite(onboard, HIGH);
     delay(200);
@@ -64,23 +64,37 @@ esp_sleep_wakeup_cause_t print_wakeup_reason(){
   return wakeup_reason;
 }
 
-// We dont have enough flash memory to do step 1.
-// void step_1_read_shadow() {
-//   digitalWrite(onboard, HIGH);
-//   connect_wifi();
-//   aws_connect();
-//   delay(2000);
+void clear_preferences() {
+  Serial.print("Clearing preferences: ");
+  Serial.print(preference_name);
+  Serial.println(" ...");
 
-//   std::string old_shadow = aws_get_shadow();
-//   char json[old_shadow.length()+1];
-//   strcpy(json, old_shadow.c_str());
-//   load_shadow(json);
+  preferences.begin(preference_name, false);
+  preferences.clear();
+  preferences.end();
+}
 
-//   disconnect_wifi();
+void step_1_read_shadow() {
+  digitalWrite(onboard, HIGH);
 
-//   digitalWrite(onboard, LOW);
-//   delay(1000);
-// }
+  if (_TESTER || isLoaded) {
+    connect_wifi();
+    aws_connect();
+    delay(2000);
+
+    std::string old_shadow = aws_get_shadow();
+    char json[old_shadow.length()+1];
+    strcpy(json, old_shadow.c_str());
+    load_shadow(json);
+
+    disconnect_wifi();
+
+    digitalWrite(onboard, LOW);
+    delay(1000);
+  } else {
+    
+  }
+}
 
 void step_2_sensor_input() {
   init_shadow(productId, fwVersion);
@@ -135,11 +149,11 @@ void setup() {
   pinMode(onboard, OUTPUT);
   Serial.begin(9600);
   Serial.println();
-  Serial.println("Initating preferences");
-  flash_led();
+  Serial.println();
+  flash_led(4);
 
   // IF USER is defined ,, this device is activated and we should update the cloud
-  preferences.begin(preference_name, false);
+  preferences.begin(preference_name, true);
   TEMP_USER = preferences.getString(user_id_key, "").c_str();
   preferences.end();
 
@@ -155,20 +169,33 @@ void setup() {
 
   if (w_reason == ESP_SLEEP_WAKEUP_EXT0) {
     Serial.println("ACTIVATE BLUETOOTH");
+
+    clear_preferences();
     run_bluetooth(productId);
   } else {
-    if (strcmp(TEMP_USER, "") == 0) {
-      //step_1_read_shadow();
-      step_2_sensor_input();
-      step_3_write_shadow();
+    if (strcmp(TEMP_USER, "") != 0) {
+      Serial.print("User Found: ");
+      Serial.println(TEMP_USER);
+      if (!_TESTER) { isLoaded = load_stored_wifi(); }
 
-      // set the next wakup time.
-      Serial.print("Next wake time in ");
-      Serial.print(SLEEP_HOURS);
-      Serial.println("hrs.");
+      if (_TESTER || isLoaded) {
+        step_1_read_shadow();
+        step_2_sensor_input();
+        step_3_write_shadow();
 
-      esp_sleep_enable_timer_wakeup(SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
-      esp_deep_sleep_start();
+        // set the next wakup time.
+        Serial.print("Next wake time in ");
+        Serial.print(SLEEP_HOURS);
+        Serial.println("hrs.");
+
+        esp_sleep_enable_timer_wakeup(SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
+        esp_deep_sleep_start();
+      } else {
+        // Never set a sleep time. This will help us conserver battery life.
+        // Wake button will still be available.
+        Serial.println("WIFI ssid/pass is not available, No next wake time set.");
+        esp_deep_sleep_start();
+      }
     } else {
       // Never set a sleep time. This will help us conserver battery life.
       // Wake button will still be available.
@@ -182,4 +209,7 @@ void setup() {
   We should never hit loop.
   But if we do, sleep.
 */
-void loop() { esp_deep_sleep_start(); }
+void loop() { 
+  Serial.println("END OF SETUP REACHED, THIS IS UNINTENDED. No next wake time set.");
+  esp_deep_sleep_start(); 
+}

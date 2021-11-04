@@ -32,15 +32,10 @@ char wifi_ssid_key[] = "wifi_ssid";
 char wifi_password[] = "wifi_password";
 char user_id_key[] = "juju_user_id";
 
-const char * temp_ssid;
-const char * temp_pass;
-const char * temp_userid;
+char temp_ssid[50];
+char temp_pass[50];
+char temp_userid[50];
 
-// std::string s_wifi = "";
-// std::string s_pass = "";
-
-// We dont really need to know if pServer is connected or not.
-// remove to reduce flash mem size.
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       Serial.println("MyServerCallback: onConnect");
@@ -55,52 +50,74 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      Serial.println("MyCallbacks onWrite");
+      //Serial.println("MyCallbacks onWrite");
       std::string value = pCharacteristic->getValue();
 
       if (value.length() > 0) {
         Serial.println("*********");
-        Serial.print("New value: ");
-        for (int i = 0; i < value.length(); i++)
-          Serial.print(value[i]);
+        // Serial.print("New value: ");
+        // for (int i = 0; i < value.length(); i++)
+        //   Serial.print(value[i]);
 
         Serial.println();
-
         preferences.begin(preference_name, false);
+        Serial.print("Begin preferences: ");
+        Serial.print(preference_name);
+        Serial.println(" ...");
+
         if (value.rfind("wifi:: ", 0) == 0) {
-          temp_ssid = value.substr(7).c_str();
+          strcpy(temp_ssid, value.substr(7).c_str());
           
-          Serial.print("Saving WIFI ssid to preference .. ");
-          Serial.println(temp_ssid);
+          Serial.print("Saving WIFI ssid: ");
+          Serial.print(temp_ssid);
 
-          preferences.putString(wifi_ssid_key , temp_ssid);
+          int l = strlen(temp_ssid);
+          Serial.print(", len: ");
+          Serial.println(l);
+          if (temp_ssid[l] == '\0') { 
+            Serial.println("(OK) has terminator.");
+          } else { 
+            Serial.println("(NOT OK). Adding null term.");
+          }
+
+          preferences.putString(wifi_ssid_key, temp_ssid);
         } else if (value.rfind("pass:: ", 0) == 0) {
-          temp_pass = value.substr(7).c_str();
+          strcpy(temp_pass, value.substr(7).c_str());
 
-          Serial.print("Saving WIFI pass to preference .. ");
-          Serial.println(temp_pass);
+          Serial.print("Saving WIFI pass: ");
+          Serial.print(temp_pass);
 
-          preferences.putString(wifi_password , temp_pass);
+          int l = strlen(temp_pass);
+          Serial.print(", len: ");
+          Serial.println(l);
+          if (temp_ssid[l] == '\0') { Serial.println("(OK) has terminator."); }
+          else { Serial.println("(NOT OK)"); }
+
+          preferences.putString(wifi_password, temp_pass);
         } else if (value.rfind("user:: ", 0) == 0){
-          temp_userid = value.substr(7).c_str();
+          strcpy(temp_userid, value.substr(7).c_str());
+          
+          Serial.print("Saving User:      ");
+          Serial.print(temp_userid);
 
-          Serial.print("Saving USER ID to preference .. ");
-          Serial.println(temp_userid);
+          int l = strlen(temp_userid);
+          Serial.print(", len: ");
+          Serial.println(l);
+          if (temp_ssid[l] == '\0') { Serial.println("(OK) has terminator."); }
+          else { Serial.println("(NOT OK)"); }
 
           preferences.putString(user_id_key, temp_userid);
         } else {
-          Serial.print("Could not find preference category (wifi:: || pass::)");
-
+          Serial.print("Could not find preference category (wifi:: || pass:: || user::)");
           char val[value.length()+1];
           strcpy(val, value.c_str());
-
           Serial.println(val);
         }
 
         preferences.end();
         Serial.println("*********");
 
-        if (temp_ssid && temp_pass && temp_userid) {
+        if (strlen(temp_ssid) != 0 && strlen(temp_pass) != 0 && strlen(temp_userid) != 0) {
           Serial.println("wifi/pass & userid defined. Will now sleep and wake to register device.");
           esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
           esp_deep_sleep_start();
@@ -170,12 +187,12 @@ void run_bluetooth(const char productId[37]) {
   pService->addCharacteristic(pCharacteristic);
   pService->start();
 
-  //BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  //pAdvertising->addServiceUUID(SERVICE_UUID);
-  //pAdvertising->setScanResponse(true);
-  //pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-  //pAdvertising->setMinPreferred(0x12);
-  //pAdvertising->start();
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
+  pAdvertising->setMinPreferred(0x12);
+  pAdvertising->start();
   pServer->startAdvertising();
   Serial.println("Waiting a client connection to notify...");
 

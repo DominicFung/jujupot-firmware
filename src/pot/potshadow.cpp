@@ -37,3 +37,5 @@ std::string get_new_shadow(unsigned long time) {
   serializeJson(shadow, output);
   return output;
 }
+
+void load_shadow(char json[]) { }
