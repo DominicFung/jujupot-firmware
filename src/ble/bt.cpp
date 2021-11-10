@@ -17,12 +17,14 @@
 #define TIME_TO_SLEEP  1        /* Time ESP32 will go to sleep (in seconds) */
 
 BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic = NULL;
+BLECharacteristic* pCharacteristicWrite = NULL;
+//BLECharacteristic* pCharacteristicProductId = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+// #define PRODUCT_CHARACTERISTIC_UUID "e446ecdf-a341-42d9-bc88-bd6809cbb758"
 
 char bluetoothPrefix[] = "JuJuPot-";
 
@@ -35,6 +37,8 @@ char user_id_key[] = "juju_user_id";
 char temp_ssid[50];
 char temp_pass[50];
 char temp_userid[50];
+
+std::string product_prefix = "product:: ";
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -49,17 +53,22 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 class MyCallbacks: public BLECharacteristicCallbacks {
+    void onRead(BLECharacteristic *pCharacteristic) {
+      //pCharacteristic->setValue("TEST");
+
+      Serial.println("== MyCallbacks onRead ==");
+      
+      std::string sendproduct = product_prefix + productId;
+      pCharacteristic->setValue(sendproduct);
+      
+      //pCharacteristic->setValue("TEST");
+    }
+
     void onWrite(BLECharacteristic *pCharacteristic) {
-      //Serial.println("MyCallbacks onWrite");
       std::string value = pCharacteristic->getValue();
 
       if (value.length() > 0) {
         Serial.println("*********");
-        // Serial.print("New value: ");
-        // for (int i = 0; i < value.length(); i++)
-        //   Serial.print(value[i]);
-
-        Serial.println();
         preferences.begin(preference_name, false);
         Serial.print("Begin preferences: ");
         Serial.print(preference_name);
@@ -116,9 +125,12 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 
         preferences.end();
         Serial.println("*********");
+        Serial.println();
 
         if (strlen(temp_ssid) != 0 && strlen(temp_pass) != 0 && strlen(temp_userid) != 0) {
           Serial.println("wifi/pass & userid defined. Will now sleep and wake to register device.");
+          
+          delay(1000);
           esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
           esp_deep_sleep_start();
         }
@@ -148,10 +160,6 @@ int bluetooth_loop() {
     if (deviceConnected && !oldDeviceConnected) {
       // do stuff here on connecting
       oldDeviceConnected = deviceConnected;
-
-      pCharacteristic->setValue("Juju-pot connected.");
-      pCharacteristic->notify();
-
       Serial.println("BLE App sucessfully connected.");
     }
 
@@ -170,21 +178,23 @@ void run_bluetooth(const char productId[37]) {
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  pCharacteristic = pService->createCharacteristic(
+  pCharacteristicWrite = pService->createCharacteristic(
                                      CHARACTERISTIC_UUID,
                                      BLECharacteristic::PROPERTY_READ   |
                                      BLECharacteristic::PROPERTY_WRITE  |
                                      BLECharacteristic::PROPERTY_NOTIFY |
-                                     BLECharacteristic::PROPERTY_INDICATE
-                                     );
+                                     BLECharacteristic::PROPERTY_INDICATE |
+                                     BLECharacteristic::PROPERTY_WRITE_NR |
+                                     BLECharacteristic::PROPERTY_BROADCAST
+                                    );
 
-  //pCharacteristic->setValue("ESP32 TEST");
-  pCharacteristic->addDescriptor(new BLE2902());
-  pCharacteristic->setReadProperty(true);
-  pCharacteristic->setCallbacks(new MyCallbacks());
-  //pCharacteristic->setValue("Sending love from Juju-pot <3");
+  pCharacteristicWrite->addDescriptor(new BLE2902());
+  pCharacteristicWrite->setReadProperty(true);
+  pCharacteristicWrite->setWriteProperty(true);
+  pCharacteristicWrite->setNotifyProperty(true);
+  pCharacteristicWrite->setCallbacks(new MyCallbacks());
 
-  pService->addCharacteristic(pCharacteristic);
+  pService->addCharacteristic(pCharacteristicWrite);
   pService->start();
 
   BLEAdvertising *pAdvertising = pServer->getAdvertising();

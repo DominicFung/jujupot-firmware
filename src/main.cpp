@@ -168,11 +168,12 @@ void setup() {
   w_reason = print_wakeup_reason();
 
   if (w_reason == ESP_SLEEP_WAKEUP_EXT0) {
-    Serial.println("ACTIVATE BLUETOOTH");
+    Serial.println("-- ACTIVATE BLUETOOTH --");
 
     clear_preferences();
     run_bluetooth(productId);
-  } else {
+  } else if (w_reason == ESP_SLEEP_WAKEUP_TIMER) {
+    Serial.println("-- COM WITH CLOUD --");
     if (strcmp(TEMP_USER, "") != 0) {
       Serial.print("User Found: ");
       Serial.println(TEMP_USER);
@@ -188,7 +189,7 @@ void setup() {
         Serial.print(SLEEP_HOURS);
         Serial.println("hrs.");
 
-        esp_sleep_enable_timer_wakeup(SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
+        esp_sleep_enable_timer_wakeup(8ULL * SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
         esp_deep_sleep_start();
       } else {
         // Never set a sleep time. This will help us conserver battery life.
@@ -196,13 +197,31 @@ void setup() {
         Serial.println("WIFI ssid/pass is not available, No next wake time set.");
         esp_deep_sleep_start();
       }
-    } else {
-      // Never set a sleep time. This will help us conserver battery life.
-      // Wake button will still be available.
-      Serial.println("User is not resgistered, No next wake time set.");
-      esp_deep_sleep_start();
     }
-  }
+  } else {
+      Serial.println("-- WAKE BY FIRST BOOT --");
+      if (strcmp(TEMP_USER, "") != 0) {
+        Serial.print("User Found: ");
+        Serial.println(TEMP_USER);
+        if (!_TESTER) { isLoaded = load_stored_wifi(); }
+        if (_TESTER || isLoaded) {
+          Serial.println("Wifi found.");
+
+          Serial.print("Next wake time in ");
+          Serial.print(SLEEP_HOURS);
+          Serial.println("hrs.");
+          // If User/WIFI/PASS found: 
+          // we assume battery was faulty and recover normal sleep times.
+          esp_sleep_enable_timer_wakeup(8ULL * SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
+          esp_deep_sleep_start();
+        }
+      } else {
+        // Never set a sleep time. This will help us conserver battery life.
+        // Wake button will still be available.
+        Serial.println("User is not resgistered, No next wake time set.");
+        esp_deep_sleep_start();
+      }
+    }
 }
 
 /* 

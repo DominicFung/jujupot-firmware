@@ -7,3 +7,5 @@ extern char preference_name[];
 extern char wifi_ssid_key[];
 extern char wifi_password[];
 extern char user_id_key[];
+
+extern char productId[37];
