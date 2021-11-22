@@ -54,14 +54,9 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onRead(BLECharacteristic *pCharacteristic) {
-      //pCharacteristic->setValue("TEST");
-
-      Serial.println("== MyCallbacks onRead ==");
-      
+      Serial.println("== Sending Product ID ==");
       std::string sendproduct = product_prefix + productId;
       pCharacteristic->setValue(sendproduct);
-      
-      //pCharacteristic->setValue("TEST");
     }
 
     void onWrite(BLECharacteristic *pCharacteristic) {
