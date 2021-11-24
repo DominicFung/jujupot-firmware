@@ -1,6 +1,8 @@
 #include <Arduino.h>
 
-#define soilpin 15   // Capacitive Soil  Moisture Sensor v1.2
+//  ADC2 GPIO pins: 6, 7, 8, 10 through to 17  
+// #define soilpin 15   // Capacitive Soil  Moisture Sensor v1.2
+#define soilpin 32
 
 #define nldrpin 12  // North LDR 
 #define eldrpin 25  // East LDR

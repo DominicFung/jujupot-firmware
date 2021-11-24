@@ -19,8 +19,21 @@
 #define onboard 2    // ESP32 LED pin
 #define SLEEP_HOURS 1
 
+#define TIME_TO_SLEEP  1        /* Time ESP32 will go to sleep (in seconds) */
+
 // When set to true, uses WIFI CONFIGURATIONS from secret_wifi.h
-bool _TESTER = false;
+bool _TESTER = true;
+
+/**
+ * @brief 
+ *  - N = New       - not all aspects are configured
+ *  - C = Configure - Bluetooth is turned on for configuration
+ *  - S = Standard  - Wifi is turned on and connected to AWS. 
+ *                    Used when UserId, Wifi, Password is defined.
+ */
+char preference_state_id[] = "jstate";
+char _STATE = 'N';
+
 
 char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
 char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
@@ -74,91 +87,50 @@ void clear_preferences() {
   preferences.end();
 }
 
-void step_1_read_shadow() {
-  digitalWrite(onboard, HIGH);
+// BT button
+void check_bt_button(void * parameter) {
+  int push_state = digitalRead(GPIO_NUM_34);
+  for(;;) {
+    if ( push_state == HIGH ) {
+      Serial.println("-- RESET BUTTON PRESS --");
 
-  if (_TESTER || isLoaded) {
-    connect_wifi();
-    aws_connect();
-    delay(2000);
+      preferences.begin(preference_name, false);
+      preferences.putChar(preference_state_id, 'C');
+      preferences.end();
 
-    std::string old_shadow = aws_get_shadow();
-    char json[old_shadow.length()+1];
-    strcpy(json, old_shadow.c_str());
-    load_shadow(json);
-
-    disconnect_wifi();
-
-    digitalWrite(onboard, LOW);
-    delay(1000);
-  } else {
-    
-  }
-}
-
-void step_2_sensor_input() {
-  init_shadow(productId, fwVersion);
-  add_pot_info(potType, color, plant);
-  add_signoff(verificationId);
-
-  int svalue = check_moisture();
-  add_sensor_value("moisture", airvalue, watervalue, 6, svalue);
-
-  int nlvalue = check_nlight();
-  add_sensor_value("light1", lightvaluehigh, lightvaluelow, 6, nlvalue);
-}
-
-void step_3_write_shadow() {
-  digitalWrite(onboard, HIGH);
-  connect_wifi();
-  
-  aws_connect();
-  delay(2000);
-
-  unsigned long time = get_time();
-  std::string output = "{test: test}"; //get_new_shadow(time);
-  aws_send(output);
-  tick=0;
-
-  digitalWrite(onboard, LOW);
-
-  // wait for aknowledgment
-  while (msgReceived == 0) {
-    digitalWrite(onboard, HIGH);
-    if(msgReceived > 0) {
-      Serial.print("Recieved Message Status: ");
-      Serial.println(msgReceived);
-
-      Serial.print("Received Message: ");
-      Serial.println(rcvdPayload);
-      msgReceived = 0;
-    } else {
-      tick++;
-      if(tick >= 20) { 
-        Serial.println("Could not get answer after 20 seconds, exiting.");
-        break;
-      }
-      delay(500);
-      digitalWrite(onboard, LOW);
-      delay(500);
+      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+      esp_deep_sleep_start();
     }
+
+    delay(1000);
   }
+}
+
+/**
+ * @brief 
+ * Before sensor_work, we expect the shadow (JSON) to already be initialized
+ * 
+ */
+void sensor_work() {
+  Serial.println(" -- seonsor work -- ");
+
+  int val = check_moisture();
+  Serial.print("Final moisture value: ");
+  Serial.println(val);
+
+  // SEND TO AWS
 }
 
 void setup() {
   pinMode(onboard, OUTPUT);
   Serial.begin(9600);
-  Serial.println();
-  Serial.println();
+  Serial.println('\n');
   flash_led(4);
 
-  // IF USER is defined ,, this device is activated and we should update the cloud
-  preferences.begin(preference_name, true);
-  TEMP_USER = preferences.getString(user_id_key, "").c_str();
-  preferences.end();
-
+  // We set the wake, since device is asleep when we make the device.
   rtc_gpio_pulldown_en((gpio_num_t) GPIO_NUM_34);
   esp_sleep_enable_ext0_wakeup((gpio_num_t) GPIO_NUM_34, RISING);
+  pinMode(GPIO_NUM_34, INPUT);
 
   int GPIO_reason = esp_sleep_get_ext1_wakeup_status();
   Serial.print("GPIO that triggered the wake up: GPIO ");
@@ -167,68 +139,107 @@ void setup() {
   esp_sleep_wakeup_cause_t w_reason;
   w_reason = print_wakeup_reason();
 
-  if (w_reason == ESP_SLEEP_WAKEUP_EXT0) {
-    Serial.println("-- ACTIVATE BLUETOOTH --");
+  // lets get the _STATE from preferences
+  preferences.begin(preference_name, true);
+  _STATE = preferences.getChar(preference_state_id, 'N');
+  Serial.print("_STATE: ");
+  Serial.println(_STATE);
+  preferences.end();
 
+
+  if (_STATE == 'C' || w_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    Serial.print("Configure Wake Reason: ");
+    Serial.print(_STATE);
+    Serial.print(" || ");
+    Serial.println(ESP_SLEEP_WAKEUP_EXT0);
+    
     clear_preferences();
     run_bluetooth(productId);
-  } else if (w_reason == ESP_SLEEP_WAKEUP_TIMER) {
-    Serial.println("-- COM WITH CLOUD --");
+
+    Serial.println("run_bluetooth stopped. SetState and Sleeping.");
+
+    //_STATE = 'S'; // should save over quick sleep (restart).
+    preferences.begin(preference_name, false);
+    preferences.putChar(preference_state_id, 'S');
+    preferences.end();
+
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+    esp_deep_sleep_start();
+
+  } else if (_STATE == 'S') {
+    preferences.begin(preference_name, true);
+    TEMP_USER = preferences.getString(user_id_key, "").c_str();
+    preferences.end();
+
     if (strcmp(TEMP_USER, "") != 0) {
       Serial.print("User Found: ");
       Serial.println(TEMP_USER);
       if (!_TESTER) { isLoaded = load_stored_wifi(); }
 
       if (_TESTER || isLoaded) {
-        step_1_read_shadow();
-        step_2_sensor_input();
-        step_3_write_shadow();
 
-        // set the next wakup time.
-        Serial.print("Next wake time in ");
-        Serial.print(SLEEP_HOURS);
-        Serial.println("hrs.");
+        xTaskCreatePinnedToCore(
+          keepWiFiAlive,
+          "keepWiFiAlive",  // Task name
+          15000,             // Stack size (bytes)
+          NULL,             // Parameter
+          0,                // Task priority
+          NULL,             // Task handle
+          0 /* Core where the task should run */
+        );
 
-        esp_sleep_enable_timer_wakeup(8ULL * SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
-        esp_deep_sleep_start();
+        // xTaskCreatePinnedToCore(
+        //   check_bt_button,
+        //   "checkBtButton",  // Task name
+        //   5000,             // Stack size (bytes)
+        //   NULL,             // Parameter
+        //   1,                // Task priority
+        //   NULL,             // Task handle
+        //   0 /* Core where the task should run */
+        // );
+
+        // Go to loop
+        delay(1000);
+        Serial.println(" -- Go to loop -- ");
       } else {
         // Never set a sleep time. This will help us conserver battery life.
         // Wake button will still be available.
         Serial.println("WIFI ssid/pass is not available, No next wake time set.");
-        esp_deep_sleep_start();
-      }
-    }
-  } else {
-      Serial.println("-- WAKE BY FIRST BOOT --");
-      if (strcmp(TEMP_USER, "") != 0) {
-        Serial.print("User Found: ");
-        Serial.println(TEMP_USER);
-        if (!_TESTER) { isLoaded = load_stored_wifi(); }
-        if (_TESTER || isLoaded) {
-          Serial.println("Wifi found.");
+        
+        preferences.begin(preference_name, false);
+        preferences.putChar(preference_state_id, 'N');
+        preferences.end();
 
-          Serial.print("Next wake time in ");
-          Serial.print(SLEEP_HOURS);
-          Serial.println("hrs.");
-          // If User/WIFI/PASS found: 
-          // we assume battery was faulty and recover normal sleep times.
-          esp_sleep_enable_timer_wakeup(8ULL * SLEEP_HOURS *  S_TO_H_FACTOR * uS_TO_S_FACTOR);
-          esp_deep_sleep_start();
-        }
-      } else {
-        // Never set a sleep time. This will help us conserver battery life.
-        // Wake button will still be available.
-        Serial.println("User is not resgistered, No next wake time set.");
         esp_deep_sleep_start();
       }
+    } else {
+      Serial.println("User is not available, sleeping indefinitely.");
+
+      preferences.begin(preference_name, false);
+      preferences.putChar(preference_state_id, 'N');
+      preferences.end();
+
+      esp_deep_sleep_start();
     }
+  } else if (_STATE == 'N') {
+    Serial.println(" -- STATE == N, going to sleep -- ");
+    esp_deep_sleep_start();
+  } else {
+    Serial.println(" ERROR: We cannot figure out the state. sleeping.");
+    esp_deep_sleep_start();
+  }
 }
 
 /* 
-  We should never hit loop.
-  But if we do, sleep.
+  We hit this loop if _STATE = S = "Standard"
+  core 1 with priority 1.
 */
 void loop() { 
-  Serial.println("END OF SETUP REACHED, THIS IS UNINTENDED. No next wake time set.");
-  esp_deep_sleep_start(); 
+  if (_STATE == 'S') {
+    Serial.println(" LOOPING! ");
+    delay(5000);
+  } else {
+    Serial.println(" ERROR: In loop but _STATE is not S. sleeping.");
+    esp_deep_sleep_start();
+  }
 }

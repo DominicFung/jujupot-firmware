@@ -5,6 +5,7 @@
 //void connect_wifi(const char * wifi_ssid, const char * wifi_password);
 
 bool load_stored_wifi();
+void keepWiFiAlive(void * parameter);
 void connect_wifi();
 void disconnect_wifi();
 

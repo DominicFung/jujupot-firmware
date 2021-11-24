@@ -18,13 +18,12 @@
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristicWrite = NULL;
-//BLECharacteristic* pCharacteristicProductId = NULL;
+
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-// #define PRODUCT_CHARACTERISTIC_UUID "e446ecdf-a341-42d9-bc88-bd6809cbb758"
 
 char bluetoothPrefix[] = "JuJuPot-";
 
@@ -39,6 +38,7 @@ char temp_pass[50];
 char temp_userid[50];
 
 std::string product_prefix = "product:: ";
+bool _INCONFIG = true;
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -126,14 +126,16 @@ class MyCallbacks: public BLECharacteristicCallbacks {
           Serial.println("wifi/pass & userid defined. Will now sleep and wake to register device.");
           
           delay(1000);
-          esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-          esp_deep_sleep_start();
+          _INCONFIG = false;
+
+          // esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+          // esp_deep_sleep_start();
         }
       }
     }
 }; 
 
-int bluetooth_loop() {
+bool bluetooth_loop() {
   // notify changed value
     if (deviceConnected) {
       /*  bluetooth stack will go into congestion, if too many packets are sent, 
@@ -158,7 +160,7 @@ int bluetooth_loop() {
       Serial.println("BLE App sucessfully connected.");
     }
 
-    return 1;
+    return _INCONFIG;
 }
 
 void run_bluetooth(const char productId[37]) {
@@ -201,8 +203,5 @@ void run_bluetooth(const char productId[37]) {
   pServer->startAdvertising();
   Serial.println("Waiting a client connection to notify...");
 
-  int bt_status = 1;
-  while(bt_status) {
-    bt_status = bluetooth_loop();
-  }
+  while(_INCONFIG) { bluetooth_loop(); }
 }
