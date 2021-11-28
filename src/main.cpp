@@ -16,10 +16,9 @@
 #include "pot/potutil.h"
 #include "ble/bt.h"
 
-#define onboard 2    // ESP32 LED pin
-#define SLEEP_HOURS 1
-
-#define TIME_TO_SLEEP  1        /* Time ESP32 will go to sleep (in seconds) */
+#define onboard        2   // ESP32 LED pin
+#define SLEEP_HOURS    1
+#define TIME_TO_SLEEP  1   /* Time ESP32 will go to sleep (in seconds) */
 
 // When set to true, uses WIFI CONFIGURATIONS from secret_wifi.h
 bool _TESTER = true;
@@ -33,6 +32,7 @@ bool _TESTER = true;
  */
 char preference_state_id[] = "jstate";
 char _STATE = 'N';
+int _wifi_state = WL_IDLE_STATUS;
 
 
 char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
@@ -87,7 +87,7 @@ void clear_preferences() {
   preferences.end();
 }
 
-// BT button
+// BT button - used for turning on BT even after device is activated.
 void check_bt_button(void * parameter) {
   int push_state = digitalRead(GPIO_NUM_34);
   for(;;) {
@@ -109,16 +109,20 @@ void check_bt_button(void * parameter) {
 /**
  * @brief 
  * Before sensor_work, we expect the shadow (JSON) to already be initialized
- * 
  */
-void sensor_work() {
-  Serial.println(" -- seonsor work -- ");
+void sensor_work(void * parameter) {
+  for (;;) {
+    Serial.println(" -- seonsor work -- ");
 
-  int val = check_moisture();
-  Serial.print("Final moisture value: ");
-  Serial.println(val);
+    int val = check_moisture();
+    Serial.print("Final moisture value: ");
+    Serial.println(val);
 
-  // SEND TO AWS
+    // update Shadow (object)
+
+    int sensor_delay_hours = 2;
+    delay(sensor_delay_hours * 60UL * 60UL * 1000UL); 
+  }
 }
 
 void setup() {
@@ -181,26 +185,26 @@ void setup() {
         xTaskCreatePinnedToCore(
           keepWiFiAlive,
           "keepWiFiAlive",  // Task name
-          15000,             // Stack size (bytes)
+          5000,             // Stack size (bytes)
           NULL,             // Parameter
           0,                // Task priority
           NULL,             // Task handle
           0 /* Core where the task should run */
         );
 
-        // xTaskCreatePinnedToCore(
-        //   check_bt_button,
-        //   "checkBtButton",  // Task name
-        //   5000,             // Stack size (bytes)
-        //   NULL,             // Parameter
-        //   1,                // Task priority
-        //   NULL,             // Task handle
-        //   0 /* Core where the task should run */
-        // );
+        xTaskCreatePinnedToCore(
+          check_bt_button,
+          "checkBtButton",  // Task name
+          5000,             // Stack size (bytes)
+          NULL,             // Parameter
+          1,                // Task priority
+          NULL,             // Task handle
+          0 /* Core where the task should run */
+        );
 
         // Go to loop
-        delay(1000);
-        Serial.println(" -- Go to loop -- ");
+        delay(3000);
+        Serial.println("Going To AWS Loop .. ");
       } else {
         // Never set a sleep time. This will help us conserver battery life.
         // Wake button will still be available.
@@ -233,11 +237,67 @@ void setup() {
 /* 
   We hit this loop if _STATE = S = "Standard"
   core 1 with priority 1.
+
+  Loops main purpose is to make sure AWS is connected.
 */
 void loop() { 
   if (_STATE == 'S') {
-    Serial.println(" LOOPING! ");
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[AWS] Detected disconnected Wifi - returning");
+      _wifi_state = WiFi.status();
+
+      delay(2000);
+      return;
+    } else if (WiFi.status() == WL_CONNECTED && _wifi_state != WL_CONNECTED) {
+      Serial.println("[AWS] Waiting for WiFi connection ..");
+      _wifi_state = WL_CONNECTED;
+
+      // Initial Shadow Connection -
+      // We will then rely on "Shadow/accepted topic for shadow updates"
+
+      aws_connect();
+      delay(2000);
+
+      std::string old_shadow = aws_get_shadow();
+
+      /**
+       * @brief 
+       *  Make sure the shadow is initiated 
+       *    - if not, create it.
+       */
+      if (old_shadow.find("product-id") != std::string::npos) {
+        char json[old_shadow.length()+1];
+        strcpy(json, old_shadow.c_str());
+        load_shadow(json);
+      } else {
+        init_shadow(productId, fwVersion);
+        add_pot_info(potType, color, plant);
+        add_signoff(verificationId);
+
+        unsigned long time = get_time();
+        std::string output = get_new_shadow(time);
+        aws_send_with_retry(output);
+      }
+
+      // Set new xTaskToCore to update Shadow with our new sensor changes
+      // Sensor function should update AWS Shadow afterwards
+      xTaskCreatePinnedToCore(
+        sensor_work,
+        "sensor",  // Task name
+        5000,             // Stack size (bytes)
+        NULL,             // Parameter
+        0,                // Task priority
+        NULL,             // Task handle
+        0 /* Core where the task should run */
+      );
+
+      return;
+    }
+
+    // Expected AWS Connected
+    Serial.println("[AWS] Connected");
     delay(5000);
+    return;
   } else {
     Serial.println(" ERROR: In loop but _STATE is not S. sleeping.");
     esp_deep_sleep_start();

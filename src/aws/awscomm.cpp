@@ -20,6 +20,8 @@ std::string aws_topic_update = aws_topic_prefix + "/shadow/update";
 std::string aws_topic_update_accepted = aws_topic_prefix + "/shadow/update/accepted";
 std::string aws_topic_update_rejected = aws_topic_prefix + "/shadow/delete/rejected";
 
+//aws_root_ca_pem = "";
+
 /**
  * msgReceived statuses:
  *    - 0: no message
@@ -34,8 +36,9 @@ std::string aws_topic_update_rejected = aws_topic_prefix + "/shadow/delete/rejec
 int msgReceived=0, msgCount=0;
 char rcvdPayload[1024];
 
-void cbhandler(char *topicName, int payloadLen, char *payLoad)
-{
+int AWS_STATUS = AWS_UNCONNECTED;
+
+void cbhandler(char *topicName, int payloadLen, char *payLoad) {
   
   msgReceived = 1;
   if (0==strcmp(topicName, aws_topic_get_accepted.c_str())) {
@@ -55,14 +58,14 @@ void cbhandler(char *topicName, int payloadLen, char *payLoad)
   Serial.println(rcvdPayload);
 }
 
-void aws_connect()
-{
-  if(aws.connect(HOST_ADDRESS,CLIENT_ID)== 0)
-  {
+void aws_connect() {
+  if(aws.connect(HOST_ADDRESS,CLIENT_ID)== 0) {
       Serial.println("Connected to AWS");
       delay(1000);
 
       char all_success='y';
+      int service_connected = 0;
+      const int total_services = 6;
 
       char get_topic_accept[aws_topic_get_accepted.length()+1];
       strcpy(get_topic_accept, aws_topic_get_accepted.c_str());
@@ -116,9 +119,7 @@ void aws_connect()
           Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
           while(1);
       }
-  }
-  else
-  {
+  } else {
       Serial.println("AWS connection failed, Check the HOST Address");
       while(1);
   }
@@ -143,15 +144,39 @@ void aws_send(const std::string& s) {
   char topic[aws_topic_update.length()+1];
   strcpy(topic, aws_topic_update.c_str());
 
-  if(aws.publish(topic, payload) == 0)
-  {        
+  if(aws.publish(topic, payload) == 0) {        
       Serial.print("Publish Message: ");
       Serial.println(payload);
       msgCount++;
   }
-  else
-  {
+  else {
       Serial.println("Publish failed");
+  }
+}
+
+void aws_send_with_retry(const std::string& s) {
+  aws_send(s);
+  int tick=0;
+
+  // wait for aknowledgment
+  while (msgReceived == 0) {
+    if(msgReceived > 0) {
+      Serial.print("Recieved Message Status: ");
+      Serial.println(msgReceived);
+
+      Serial.print("Received Message: ");
+      Serial.println(rcvdPayload);
+      msgReceived = 0;
+    } else {
+      tick++;
+      if(tick >= 20) { 
+        Serial.println("Could not get answer after 20 seconds, exiting.");
+        break;
+      }
+      delay(500);
+      // Light on/off here?
+      delay(500);
+    }
   }
 }
 
