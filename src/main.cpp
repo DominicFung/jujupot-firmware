@@ -22,18 +22,7 @@
 
 // When set to true, uses WIFI CONFIGURATIONS from secret_wifi.h
 bool _TESTER = true;
-
-/**
- * @brief 
- *  - N = New       - not all aspects are configured
- *  - C = Configure - Bluetooth is turned on for configuration
- *  - S = Standard  - Wifi is turned on and connected to AWS. 
- *                    Used when UserId, Wifi, Password is defined.
- */
-char preference_state_id[] = "jstate";
-char _STATE = 'N';
 int _wifi_state = WL_IDLE_STATUS;
-
 
 char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
 char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
@@ -84,13 +73,20 @@ void clear_preferences() {
 
   preferences.begin(preference_name, false);
   preferences.clear();
+
+  // WE NEED TO PUT BACK "Configure" STATE:
+  preferences.putChar(preference_state_id, 'C');
+
   preferences.end();
 }
 
 // BT button - used for turning on BT even after device is activated.
 void check_bt_button(void * parameter) {
-  int push_state = digitalRead(GPIO_NUM_34);
   for(;;) {
+    Serial.print("[Button] Checking .. ");
+    int push_state = digitalRead(GPIO_NUM_34);
+    Serial.println(push_state);
+    
     if ( push_state == HIGH ) {
       Serial.println("-- RESET BUTTON PRESS --");
 
@@ -102,7 +98,7 @@ void check_bt_button(void * parameter) {
       esp_deep_sleep_start();
     }
 
-    delay(1000);
+    delay(200);
   }
 }
 
@@ -157,7 +153,7 @@ void setup() {
     Serial.print(" || ");
     Serial.println(ESP_SLEEP_WAKEUP_EXT0);
     
-    clear_preferences();
+    // clear_preferences();
     run_bluetooth(productId);
 
     Serial.println("run_bluetooth stopped. SetState and Sleeping.");

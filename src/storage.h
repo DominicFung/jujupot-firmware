@@ -8,4 +8,7 @@ extern char wifi_ssid_key[];
 extern char wifi_password[];
 extern char user_id_key[];
 
+extern char preference_state_id[];
+extern char _STATE;
+
 extern char productId[37];

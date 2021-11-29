@@ -20,8 +20,6 @@ std::string aws_topic_update = aws_topic_prefix + "/shadow/update";
 std::string aws_topic_update_accepted = aws_topic_prefix + "/shadow/update/accepted";
 std::string aws_topic_update_rejected = aws_topic_prefix + "/shadow/delete/rejected";
 
-//aws_root_ca_pem = "";
-
 /**
  * msgReceived statuses:
  *    - 0: no message

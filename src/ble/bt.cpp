@@ -29,6 +29,17 @@ char bluetoothPrefix[] = "JuJuPot-";
 
 Preferences preferences;
 char preference_name[] = "juju-app";
+
+/**
+ * @brief 
+ *  - N = New       - not all aspects are configured
+ *  - C = Configure - Bluetooth is turned on for configuration
+ *  - S = Standard  - Wifi is turned on and connected to AWS. 
+ *                    Used when UserId, Wifi, Password is defined.
+ */
+char preference_state_id[] = "jstate";
+char _STATE = 'N';
+
 char wifi_ssid_key[] = "wifi_ssid";
 char wifi_password[] = "wifi_password";
 char user_id_key[] = "juju_user_id";
@@ -163,10 +174,37 @@ bool bluetooth_loop() {
     return _INCONFIG;
 }
 
+void bt_timeout (void * parameter) {
+  Serial.println("Bluetooth Timeout timer started. 20 mins");
+
+  int bt_timeout_minutes = 20;
+  delay(bt_timeout_minutes * 60UL * 1000UL); 
+
+  Serial.println("Bluetooth Timeout complete.");
+
+  preferences.begin(preference_name, false);
+  preferences.putChar(preference_state_id, 'S');
+  preferences.end();
+
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
+}
+
 void run_bluetooth(const char productId[37]) {
   int p = strlen(productId);
   std::string post = std::string(productId).substr(p-5, p-1);
   std::string bt = bluetoothPrefix + post;
+
+  // set a timeout:
+  xTaskCreatePinnedToCore(
+    bt_timeout,
+    "bt_timeout",  // Task name
+    5000,             // Stack size (bytes)
+    NULL,             // Parameter
+    0,                // Task priority
+    NULL,             // Task handle
+    0 /* Core where the task should run */
+  );
 
   char btname[bt.length()+1];
   strcpy(btname, bt.c_str());
