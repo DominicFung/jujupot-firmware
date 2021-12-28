@@ -9,3 +9,6 @@ certs/
 tmp/
 
 secret_*.h
+product_config.h
+
+downloads/

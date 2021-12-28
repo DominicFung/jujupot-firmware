@@ -83,15 +83,12 @@ void clear_preferences() {
 // BT button - used for turning on BT even after device is activated.
 void check_bt_button(void * parameter) {
   for(;;) {
-    Serial.print("[Button] Checking .. ");
     int push_state = digitalRead(GPIO_NUM_34);
-    Serial.println(push_state);
-    
     if ( push_state == HIGH ) {
       Serial.println("-- RESET BUTTON PRESS --");
 
       preferences.begin(preference_name, false);
-      preferences.putChar(preference_state_id, 'C');
+      preferences.putChar(preference_state_id, 'S'); // TODO: C
       preferences.end();
 
       esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
