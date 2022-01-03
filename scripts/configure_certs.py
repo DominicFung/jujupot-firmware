@@ -13,27 +13,27 @@ import os
 path_to_c_file = ".pio/libdeps/az-delivery-devkit-v4/AWS_IOT/src/"
 c_file = "aws_iot_certficates.c"
 
-if not os.path.isfile("../certs/aws-root-ca.pem"):
+if not os.path.isfile("./certs/aws-root-ca.pem"):
   print("ERROR: certs/aws-root-ca.pem not found.")
   exit(1)
 
-if not os.path.isfile("../certs/certificate.pem.crt"):
+if not os.path.isfile("./certs/certificate.pem.crt"):
   print("ERROR: certs/certificate.pem.crt not found.")
   exit(1)
 
-if not os.path.isfile("../certs/private.pem.key"):
+if not os.path.isfile("./certs/private.pem.key"):
   print("ERROR: certs/private.pem.key not found.")
   exit(1)
 
 eol_car = "\\n\\\n"
 
-with open("../certs/aws-root-ca.pem") as file:
+with open("./certs/aws-root-ca.pem") as file:
   aws_root_ca = file.read().replace("\n", eol_car)
 
-with open("../certs/certificate.pem.crt") as file:
+with open("./certs/certificate.pem.crt") as file:
   certificate_pem = file.read().replace("\n", eol_car)
 
-with open("../certs/private.pem.key") as file:
+with open("./certs/private.pem.key") as file:
   private_pem = file.read().replace("\n", eol_car)
 
 aws_root_ca_template = f'const char aws_root_ca_pem[] = {{"{aws_root_ca}"}};\n'
