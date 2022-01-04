@@ -5,184 +5,101 @@
 #include "awscomm.h"
 
 #include "secret_aws.h"
+#include "awstopics.h"
 
 AWS_IOT aws;
 
-// AWS IoT core shadow topics
-// char aws_topic_prefix[]="$aws/things/";
-std::string aws_topic_prefix = std::string("$aws/things/") + deviceId;
+int tick=0,msgCount=0,msgReceived = 0;
+char payload[512];
+char rcvdPayload[512];
+char _empty_payload[] = "";
 
-std::string aws_topic_get = aws_topic_prefix + "/shadow/get";
-std::string aws_topic_get_accepted = aws_topic_prefix + "/shadow/get/accepted";
-std::string aws_topic_get_rejected = aws_topic_prefix + "/shadow/get/rejected";
+void dataCallback(char *topicName, int payloadLen, char *payLoad) {
+    strncpy(rcvdPayload, payLoad, payloadLen);
+    rcvdPayload[payloadLen] = 0;
 
-std::string aws_topic_update = aws_topic_prefix + "/shadow/update";
-std::string aws_topic_update_accepted = aws_topic_prefix + "/shadow/update/accepted";
-std::string aws_topic_update_rejected = aws_topic_prefix + "/shadow/delete/rejected";
-
-/**
- * msgReceived statuses:
- *    - 0: no message
- *    - 1: UNKNOWN message origin.
- * 
- *    - 2: get shadow accept
- *    - 3: get shadow reject
- * 
- *    - 4: update shadow accept
- *    - 5: update shadow reject
- */
-int msgReceived=0, msgCount=0;
-char rcvdPayload[1024];
-
-void cbhandler(char *topicName, int payloadLen, char *payLoad)
-{
-  
-  msgReceived = 1;
-  if (0==strcmp(topicName, aws_topic_get_accepted.c_str())) {
-    msgReceived = 2;
-  } else if (0==strcmp(topicName, aws_topic_get_rejected.c_str())) {
-    msgReceived = 3;
-  } else if (0==strcmp(topicName, aws_topic_update_accepted.c_str())) {
-    msgReceived = 4;
-  } else if (0==strcmp(topicName, aws_topic_update_rejected.c_str())) {
-    msgReceived = 5;
-  }
-
-  rcvdPayload[payloadLen] = 0;
-  strncpy(rcvdPayload, payLoad, payloadLen);
-  
-  Serial.print("cbhandler: ");
-  Serial.println(rcvdPayload);
+    // Note: *topicName is not null-terminated \0
+    if (strncmp(topicName, aws_shadow_topic_get_return, strlen(aws_shadow_topic_get_return)-1) == 0) {
+        msgReceived = 1;
+        Serial.println("Received getDeviceDataCallback:");
+        Serial.println(payLoad);
+    } else if (strncmp(topicName, aws_shadow_topic_update_return, strlen(aws_shadow_topic_update_return)-1) == 0) {
+        msgReceived = 2;
+        Serial.println("Received updateDeviceDataCallback:");
+        Serial.println(payLoad);
+    } else {
+      Serial.println("Received unknown topic.");
+    }
 }
 
-void aws_connect()
-{
-  if(aws.connect(HOST_ADDRESS,CLIENT_ID)== 0)
-  {
+void await_get_shadow() {
+  int retry = 0;
+  int max_retry = 20;
+
+  while (retry < 5) {
+    if (aws.publish(aws_shadow_topic_get, _empty_payload) == 0) {
+      Serial.println("Publish Get OK.");
+      break;
+    } else {
+      Serial.println("Publish Get Failed.");
+    }
+    retry++;
+    delay(1000);
+  }
+
+  retry = 0;
+  while(retry < max_retry) {
+    if(msgReceived == 1) {
+        msgReceived = 0;
+        Serial.print("Received Message:");
+        Serial.println(rcvdPayload);
+        return;
+    }
+    retry++;
+    delay(1000);
+  }
+
+  Serial.println("Max retry reached, GetShadow Failed.");
+}
+
+void update_shadow(char *payload) {
+  if(aws.publish(aws_shadow_topic_update, payload) == 0) {        
+      Serial.println("Publish Update Ok.");
+  } else {
+      Serial.println("Publish Update Failed.");
+  }
+}
+
+void aws_connect() {
+  Serial.println("Connected to wifi");
+  if(aws.connect(HOST_ADDRESS, CLIENT_ID)== 0) {
       Serial.println("Connected to AWS");
       delay(1000);
 
-      char all_success='y';
-
-      char get_topic_accept[aws_topic_get_accepted.length()+1];
-      strcpy(get_topic_accept, aws_topic_get_accepted.c_str());
-      if (0==aws.subscribe(get_topic_accept, cbhandler)) {
-          Serial.print("Subscribe Successfull to ");
-          Serial.println(get_topic_accept);
+      if(0==aws.subscribe(aws_shadow_topic_get_return, dataCallback)){
+          Serial.println("Subscribe getDevice Successfull");
       } else {
-          Serial.print(" --- FAILED to subscribe: ");
-          Serial.print(get_topic_accept);
-          Serial.println(" --- ");
-          all_success='n';
-      }
-
-      char get_topic_reject[aws_topic_get_rejected.length()+1];
-      strcpy(get_topic_reject, aws_topic_get_rejected.c_str());
-      if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to ");
-          Serial.println(get_topic_reject);
-      } else {
-          Serial.print(" --- FAILED to subscribe: ");
-          Serial.print(get_topic_reject);
-          Serial.println(" --- ");
-          all_success='n';
-      }
-
-      char update_topic_accept[aws_topic_update_accepted.length()+1];
-      strcpy(update_topic_accept, aws_topic_update_accepted.c_str());
-      if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to ");
-          Serial.println(update_topic_accept);
-      } else {
-          Serial.print(" --- FAILED to subscribe: ");
-          Serial.print(update_topic_accept);
-          Serial.println(" --- ");
-          all_success='n';
-      }
-
-      char update_topic_reject[aws_topic_update_rejected.length()+1];
-      strcpy(update_topic_reject, aws_topic_update_rejected.c_str());
-      if (0==aws.subscribe(get_topic_reject, cbhandler)) {
-          Serial.print("Subscribe Successfull to ");
-          Serial.println(update_topic_reject);
-      } else {
-          Serial.print(" --- FAILED to subscribe: ");
-          Serial.print(update_topic_reject);
-          Serial.println(" --- ");
-          all_success='n';
-      }
-
-      if (all_success=='n') {
-          Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
+          Serial.println("Subscribe Get Failed, Check the Thing Name and Certificates");
           while(1);
       }
-  }
-  else
-  {
+
+      if(0==aws.subscribe(aws_shadow_topic_update_return, dataCallback)){
+          Serial.println("Subscribe updateDeviceData Successfull");
+      } else {
+          Serial.println("Subscribe Update Failed, Check the Thing Name and Certificates");
+          while(1);
+      }
+  } else {
       Serial.println("AWS connection failed, Check the HOST Address");
       while(1);
   }
+  delay(2000);
 }
 
-void aws_send(const std::string& s) {
-  int n = s.length();
-  char payload[n+1];
-
-  Serial.print("s: ");
-  Serial.println(s.c_str());
-  
-  strcpy(payload, s.c_str());
-
-  Serial.print("payload: ");
-  Serial.println(payload);
-
-  Serial.print(" -- Sending to AWS IoT from ESP32, count: ");
-  Serial.println(msgCount);
-  msgCount++;
-
-  char topic[aws_topic_update.length()+1];
-  strcpy(topic, aws_topic_update.c_str());
-
-  if(aws.publish(topic, payload) == 0)
-  {        
-      Serial.print("Publish Message: ");
-      Serial.println(payload);
-      msgCount++;
-  }
-  else
-  {
-      Serial.println("Publish failed");
-  }
-}
-
-std::string aws_get_shadow() {
-  char topic[aws_topic_get.length()+1];
-  strcpy(topic, aws_topic_get.c_str());
-
-  int tick=0, RETRY=3;
-
-  while (tick < RETRY) {
-    if (aws.publish(topic, "") == 0) {
-      tick=0;
-      while (tick < 10) {
-        if (msgReceived == 1) {
-          
-          
-          Serial.println(rcvdPayload);
-          msgReceived = 0;
-        } else if (msgReceived == 2) {
-          
-
-          msgReceived = 0;
-        } else {
-          delay(1000);
-          tick++;
-        }
-      }
+void keep_alive() {
+  if(aws.publish(aws_custom_ping, "") == 0) {
+        Serial.println("Keep Alive OK");
     } else {
-      tick ++;
-      delay(1000);
+        Serial.println("Keep Alive Failed");
     }
-  }
 }
-
