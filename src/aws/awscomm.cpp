@@ -32,14 +32,17 @@ void dataCallback(char *topicName, int payloadLen, char *payLoad) {
     }
 }
 
-void await_get_shadow() {
+/**
+ * @brief 
+ * @param buff should be of size 512
+ */
+void await_get_shadow(char *buff) {
   int retry = 0;
   int max_retry = 20;
 
   while (retry < 5) {
     if (aws.publish(aws_shadow_topic_get, _empty_payload) == 0) {
-      Serial.println("Publish Get OK.");
-      break;
+      Serial.println("Publish Get OK."); break;
     } else {
       Serial.println("Publish Get Failed.");
     }
@@ -50,9 +53,11 @@ void await_get_shadow() {
   retry = 0;
   while(retry < max_retry) {
     if(msgReceived == 1) {
-        msgReceived = 0;
-        Serial.print("Received Message:");
+        msgReceived = 0; Serial.print("Received Message:");
         Serial.println(rcvdPayload);
+        for (int i=0; i<sizeof(rcvdPayload); i++) {
+          buff[i] = rcvdPayload[i];
+        }
         return;
     }
     retry++;

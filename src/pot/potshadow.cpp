@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-StaticJsonDocument<500> shadow;
+StaticJsonDocument<512> shadow;
+
 JsonObject state = shadow.createNestedObject("state");
 JsonObject reported = state.createNestedObject("reported");
 
@@ -30,7 +31,6 @@ void add_sensor_value(const char key[50], const int high, const int low, const i
   JsonObject s = sensors.createNestedObject(key);
   s["config-high"] = high;
   s["config-low"] = low;
-  s["config-samples"] = samples; // Maybe remove this .. we dont have enough space
   s["value"] = value;
 }
 
@@ -56,4 +56,53 @@ std::string get_new_shadow(unsigned long time) {
   return output;
 }
 
-void load_shadow(char json[]) { }
+bool load_shadow(char json[]) {
+  auto error = deserializeJson(shadow, json);
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return false;
+  } else { return true; }
+}
+
+bool load_init_sensor(char json[]) {
+  StaticJsonDocument<512> doc;
+  auto error = deserializeJson(doc, json);
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return false;
+  } else { 
+    JsonObject c = doc.as<JsonObject>();
+    sensors.set(c);
+    return true;
+  }
+}
+
+bool load_init_controlable(char json[]) {
+  StaticJsonDocument<200> doc;
+  Serial.println(json);
+  auto error = deserializeJson(doc, json);
+  Serial.println(json);
+
+  const char* world = doc["hello"];
+  Serial.println(world);
+  
+  std::string testoutput;
+  serializeJson(doc, testoutput);
+  for(int i=0; i<testoutput.length(); i++) {
+    Serial.print(testoutput.at(i));
+  }
+  Serial.println();
+
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return false;
+  } else { 
+    JsonObject c = doc.as<JsonObject>();
+    bool isCSet = controllables.set(c);
+    if (!isCSet) { Serial.println("Unable to set Controllable."); }
+    return isCSet;
+  }
+}

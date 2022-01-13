@@ -1,19 +1,24 @@
-# JUJU Pots - ESP32-WROOM (Arduino)
+# Jujupots - ESP32-WROOM (Arduino)
 
 We're using PlatformIO for library management.
 
 ## IOT Certificate
+This project is powered by [Hommie.io](https://hommie.io)
 
-Go to Jujupot Admin portal and download jujupot-certs.zip
+Go to the [Hommieo Admin portal](https://makers.hommie.io) and download a hommieo Cert Zip file.
 Then run the following:
 ```
-python3 init_product.py -i "../../Downloads/jujupot-certs (17).zip"
+python3 init_product.py -i "../../Downloads/hommieo_********.zip"
 ```
-This writes all the required configuration parameters to our h files.
+This writes all the required configuration parameters to our h files. You are ready to begin testing your product!
+
+<br>
+
+---
+## Manual configurations
 
 ---
 
-## Manual Certificate loading (automated by configure_certs.py)
 Go to the following C file:
 
 ```

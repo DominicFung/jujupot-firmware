@@ -12,3 +12,5 @@ secret_*.h
 product_config.h
 
 downloads/
+topics.h
+awstopics.h

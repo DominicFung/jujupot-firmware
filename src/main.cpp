@@ -12,20 +12,13 @@
 
 #include "secret_aws.h"
 #include "storage.h"
+#include "product_config.h"
 
 #define onboard        2   // ESP32 LED pin
 #define SLEEP_HOURS    1
 #define TIME_TO_SLEEP  1   /* Time ESP32 will go to sleep (in seconds) */
 
-char productId[] = "58109219-d923-49fc-b349-d713f2c7d2a3";
-char verificationId[] = "204ed6d7-efb4-4b55-99f1-50704d984219";
-char potType[] = "small-planter-v1";
-char color[] = "blue-white-v1";
-char plant[] = "sedum-morganianum_costco_pid";
-int fwVersion = 1;
-
-const char * TEMP_USER;
-
+const char* TEMP_USER;
 int tock = 0;
 
 int _wifi_state = WL_IDLE_STATUS;
@@ -236,23 +229,42 @@ void loop() {
         /* ***********************************************************
          *    ON CONNECTION PROCEEDURE (1 TIME)
          * *********************************************************** */
+              char shadowfromcloud[512];
+              await_get_shadow(shadowfromcloud);
+              if (std::string(shadowfromcloud).find("product-id") != std::string::npos) {
+                Serial.println("[AWS] Shadow found loading as JSON ...");
+                if (load_shadow(shadowfromcloud)) {
+                  Serial.println("[JSON] Shadow loaded successfully.");
+                  return;
+                } else {
+                  Serial.println("[JSON] ERROR did not load properly. EXIT");
+                  while(1); // generally we expect shadows that pass AWS iot core to be valid.
+                }
+              } else {
+                Serial.println("[AWS] Shadow not found with product-id. Creating new one.");
+                Serial.println("====== INIT SHADOW ======");
 
-              await_get_shadow();
+                init_shadow(productId, fwVersion);
+                add_device_id(CLIENT_ID);
+                add_signoff(verificationId);
 
-              init_shadow(productId, fwVersion);
-              add_device_id(CLIENT_ID);
-              add_signoff(verificationId);
+                load_init_sensor(sensor_init_json);
 
-              unsigned long time = get_time();
-              std::string output = get_new_shadow(time);
+                Serial.println(controlable_init_json);
+                load_init_controlable(controlable_init_json);
 
-              int n = output.length();
-              char payload2[n+1];
-              strcpy(payload2, output.c_str());
+                unsigned long time = get_time();
+                std::string output = get_new_shadow(time);
 
-              update_shadow(payload2);
+                int n = output.length();
+                char payload2[n+1];
+                strcpy(payload2, output.c_str());
 
-              
+                update_shadow(payload2);
+              }
+        /* ***********************************************************/
+        /* ***********************************************************/
+
       } else {
         // Connected and runs continously.
         if (tock >= 5) { tock=0; keep_alive(); }

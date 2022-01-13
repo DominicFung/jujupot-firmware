@@ -3,7 +3,7 @@
 // const int AWS_CONNECTED = 1;
 
 void aws_connect();
-void await_get_shadow();
+void await_get_shadow(char *buff);
 void update_shadow(char *payload);
 void keep_alive();
 
