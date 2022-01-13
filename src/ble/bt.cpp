@@ -9,6 +9,8 @@
 #include <BLEServer.h>
 #include <BLE2902.h>
 
+#include "../secret_aws.h"
+
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
@@ -66,7 +68,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onRead(BLECharacteristic *pCharacteristic) {
       Serial.println("== Sending Product ID ==");
-      std::string sendproduct = product_prefix + productId;
+      std::string sendproduct = product_prefix + DEVICE_ID;
       pCharacteristic->setValue(sendproduct);
     }
 
