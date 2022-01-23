@@ -106,3 +106,18 @@ bool load_init_controlable(char json[]) {
     return isCSet;
   }
 }
+
+/**
+ * @brief Get the controllable object
+ * @return JsonObject 
+ * 
+ * {"sensors":{"lsv1-3":{"h":20,"l":0,"v":1}},"controllables":{"ledv1-1":{"v":"0000FF"}},"product-id":"dabae003-b3c6-491a-82e3-47b56e16eecd","local-fw-version":1,"device-id":"hommieo_9e2c0d3b-88bd-46fc-a18d-5291a3737e83","verification-id":"e99e3303-dcc5-4071-9569-94068bac24cc","comm-time":1642951071}
+ */
+
+JsonObject get_controllable() {
+  if (shadow.containsKey("controllables")) {
+    return shadow["controllables"].as<JsonObject>();
+  } else { 
+    Serial.println("GETCONTROLLABLE ERROR: No controllable in reported");
+  }
+}

@@ -7,6 +7,9 @@
 #include "secret_aws.h"
 #include "awstopics.h"
 
+#include "../pot/potshadow.h"
+#include "../pot/potutil.h"
+
 AWS_IOT aws;
 
 int tick=0,msgCount=0,msgReceived = 0;
@@ -23,10 +26,36 @@ void dataCallback(char *topicName, int payloadLen, char *payLoad) {
         msgReceived = 1;
         Serial.println("Received getDeviceDataCallback:");
         Serial.println(payLoad);
+
+        if (load_shadow(payLoad)) {
+          Serial.println("Shadow loaded after update");
+          JsonObject controllables = get_controllable();
+          const char* test = controllables["ledv1-1"]["v"];
+
+          Serial.print("Controllable ledv1-1 value: ");
+          Serial.print(test);
+
+          turn_on_light((char*)test);
+        } else {
+            Serial.println("Shadow load failed");
+        }
     } else if (strncmp(topicName, aws_shadow_topic_update_return, strlen(aws_shadow_topic_update_return)-1) == 0) {
         msgReceived = 2;
         Serial.println("Received updateDeviceDataCallback:");
         Serial.println(payLoad);
+
+        if (load_shadow(payLoad)) {
+          Serial.println("Shadow loaded after update");
+          JsonObject controllables = get_controllable();
+          const char* test = controllables["ledv1-1"]["v"];
+
+          Serial.print("Controllable ledv1-1 value: ");
+          Serial.print(test);
+
+          turn_on_light((char*)test);
+        } else {
+            Serial.println("Shadow load failed");
+        }
     } else {
       Serial.println("Received unknown topic.");
     }
@@ -52,7 +81,7 @@ void await_get_shadow(char *buff) {
 
   retry = 0;
   while(retry < max_retry) {
-    if(msgReceived == 1) {
+    if(msgReceived == 1) { // Just here to block the loop until the message is received
         msgReceived = 0; Serial.print("Received Message:");
         Serial.println(rcvdPayload);
         for (int i=0; i<sizeof(rcvdPayload); i++) {

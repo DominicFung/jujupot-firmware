@@ -23,6 +23,23 @@ int tock = 0;
 
 int _wifi_state = WL_IDLE_STATUS;
 
+// Set up the rgb led names
+uint8_t ledR = 23;
+uint8_t ledG = 22;
+uint8_t ledB = 21; 
+
+uint8_t ledArray[3] = {1, 2, 3}; // three led channels
+
+uint8_t color = 0;          // a value from 0 to 255 representing the hue
+uint32_t R, G, B;           // the Red Green and Blue color components
+uint8_t brightness = 255;  // 255 is maximum brightness, but can be changed.  Might need 256 for common anode to fully turn off.
+
+void RGB_color(int red_light_value, int green_light_value, int blue_light_value) {
+  ledcWrite(1,   red_light_value);
+  ledcWrite(2, green_light_value);
+  ledcWrite(3,  blue_light_value);
+}
+
 void flash_led(int times) {
   int tock2 = 0;
   while (tock2 < times) {
@@ -108,6 +125,16 @@ void setup() {
     delay(2000);
     Serial.println('\n');
     flash_led(4);
+    
+    ledcAttachPin(ledR, 1);
+    ledcAttachPin(ledG, 2);
+    ledcAttachPin(ledB, 3);
+
+    ledcSetup(1, 12000, 8); // 12 kHz PWM, 8-bit resolution
+    ledcSetup(2, 12000, 8);
+    ledcSetup(3, 12000, 8);
+
+    RGB_color(0, 0, 0); // red
 
     // We set the wake, since device is asleep when we make the device.
     rtc_gpio_pulldown_en((gpio_num_t) GPIO_NUM_34);
